@@ -21,13 +21,19 @@ class FilterButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.deepPurpleAccent : const Color(0xFF1F1F1F),
-          borderRadius: BorderRadius.circular(20),
+        color: isSelected 
+            ? Colors.deepPurpleAccent 
+            : (Theme.of(context).brightness == Brightness.dark 
+                ? const Color(0xFF1F1F1F) 
+                : Colors.grey[300]),
+        borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.black : Colors.white,
+            color: isSelected 
+              ? Colors.black 
+              : Theme.of(context).textTheme.bodyLarge?.color,
             fontWeight: FontWeight.bold,
           ),
         ),

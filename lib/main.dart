@@ -23,7 +23,7 @@ class MyApp extends StatelessWidget {
       builder: (_, currentMode, __) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          themeMode: currentMode, // Utilise le mode actuel
+          themeMode: currentMode,
           
           // THÈME CLAIR
           theme: ThemeData(

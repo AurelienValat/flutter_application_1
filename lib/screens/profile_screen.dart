@@ -14,75 +14,78 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isVerticalLocked = true; 
   bool _isDarkMode = true;
 
+  
   void _showSettings(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
-      backgroundColor: isDark ? const Color(0xFF1F1F1F) : Colors.white,
+      backgroundColor: Colors.transparent, 
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        // StatefulBuilder permet de mettre à jour le Switch à l'intérieur de la fenêtre surgissante
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            return Padding(
+        return ValueListenableBuilder<ThemeMode>(
+          valueListenable: themeNotifier,
+          builder: (context, currentMode, child) {
+            final isDarkInner = currentMode == ThemeMode.dark;
+            
+            return Container(
+              decoration: BoxDecoration(
+                color: isDarkInner ? const Color(0xFF1F1F1F) : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              ),
               padding: const EdgeInsets.all(20),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text("Paramètres d'affichage", 
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(
+                    "Paramètres d'affichage",
+                    style: TextStyle(
+                      fontSize: 18, 
+                      fontWeight: FontWeight.bold,
+                      color: isDarkInner ? Colors.white : Colors.black,
+                    ),
+                  ),
                   const SizedBox(height: 20),
+                  
+                  // Option Vertical Lock
                   ListTile(
                     leading: const Icon(Icons.screen_lock_portrait, color: Colors.deepPurpleAccent),
-                    title: const Text("Forcer le mode Vertical"),
+                    title: Text("Forcer le mode Vertical", 
+                      style: TextStyle(color: isDarkInner ? Colors.white : Colors.black)),
                     trailing: Switch(
                       value: _isVerticalLocked,
                       activeColor: Colors.deepPurpleAccent,
                       onChanged: (bool value) {
-                        // 1. On met à jour l'orientation réelle du téléphone
                         if (value) {
                           SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
                         } else {
-                          SystemChrome.setPreferredOrientations([
-                            DeviceOrientation.portraitUp,
-                            DeviceOrientation.portraitDown,
-                            DeviceOrientation.landscapeLeft,
-                            DeviceOrientation.landscapeRight,
-                          ]);
+                          SystemChrome.setPreferredOrientations(DeviceOrientation.values);
                         }
-                        
-                        // 2. On met à jour l'interface (le bouton change de position)
-                        setModalState(() {
-                          _isVerticalLocked = value;
-                        });
+                        setState(() => _isVerticalLocked = value);
+                      },
+                    ),
+                  ),
+
+                  // Option Mode Sombre
+                  ListTile(
+                    leading: Icon(
+                      isDarkInner ? Icons.dark_mode : Icons.light_mode, 
+                      color: Colors.deepPurpleAccent
+                    ),
+                    title: Text("Mode Sombre", 
+                      style: TextStyle(color: isDarkInner ? Colors.white : Colors.black)),
+                    trailing: Switch(
+                      value: isDarkInner,
+                      activeColor: Colors.deepPurpleAccent,
+                      onChanged: (bool value) {
+                        themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
                         setState(() {
-                          _isVerticalLocked = value;
+                          _isDarkMode = value;
                         });
                       },
                     ),
                   ),
                   const SizedBox(height: 20),
-
-                  ListTile(
-                    leading: Icon(
-                      _isDarkMode ? Icons.dark_mode : Icons.light_mode, 
-                      color: Colors.deepPurpleAccent
-                    ),
-                    title: const Text("Mode Sombre"),
-                    trailing: Switch(
-                      value: _isDarkMode,
-                      activeColor: Colors.deepPurpleAccent,
-                      onChanged: (bool value) {
-                        setModalState(() {
-                          _isDarkMode = value;
-                        });
-                        // On change le thème global
-                        themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
-                      },
-                    ),
-                  ),
                 ],
               ),
             );
@@ -92,47 +95,104 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  void _showStats(BuildContext context) {
+    // TODO Stats
+  }
+
+  void _showBadges(BuildContext context) {
+    // TODO Badges
+  }
+
+  void _showCompte(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, 
+      backgroundColor: isDark ? const Color(0xFF1F1F1F) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20))
+      ),
+      builder: (context) {
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(30),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            // Centrer les éléments horizontalement dans la colonne élargie
+            crossAxisAlignment: CrossAxisAlignment.center, 
+            children: [
+              const CircleAvatar(
+                radius: 50,
+                backgroundColor: Colors.deepPurpleAccent,
+                child: Icon(Icons.person, size: 60, color: Colors.white),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                "Utilisateur",
+                style: TextStyle(
+                  fontSize: 22, 
+                  fontWeight: FontWeight.bold,
+                  color: theme.textTheme.titleLarge?.color
+                ),
+              ),
+              Text(
+                "premium@cinema.com",
+                style: TextStyle(color: isDark ? Colors.white54 : Colors.black54),
+              ),
+              const SizedBox(height: 30),
+              SizedBox(
+                width: 200, 
+                child: ElevatedButton(
+                  onPressed: () {},
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurpleAccent,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))
+                  ),
+                  child: const Text("Modifier mes infos", style: TextStyle(color: Colors.white)),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showFavoris(BuildContext context) {
+    // TODO Favoris
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 40),
-            const CircleAvatar(
-              radius: 60,
-              backgroundColor: Colors.deepPurpleAccent,
-              child: Icon(Icons.person, size: 80, color: Colors.white),
-            ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 30),
             Text(
-              "Utilisateur",
+              "Nom d'utilisateur",
               style: TextStyle(
-                fontSize: 26, 
-                fontWeight: FontWeight.bold,
-                color: theme.textTheme.titleLarge?.color, // Dynamique
+                fontSize: 28, 
+                fontWeight: FontWeight.bold, 
+                color: theme.textTheme.titleLarge?.color
               )
             ),
-            Text(
-              "premium@cinema.com",
-              style: TextStyle(color: isDark ? Colors.white54 : Colors.black54), // Dynamique
-            ),           
-            const SizedBox(height: 40),
+            const SizedBox(height: 30),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 children: [
-                  _buildProfileOption(
-                    context,
-                    icon: Icons.settings,
-                    title: "Paramètres",
-                    subtitle: "Affichage et orientation",
-                    onTap: () => _showSettings(context),
-                  ),
+                  _buildOption(context, icon: Icons.account_circle, title: "Mon Compte", subtitle: "Gérer mes infos personnelles", onTap: () => _showCompte(context)),
+                  _buildOption(context, icon: Icons.settings, title: "Paramètres", subtitle: "Affichage et orientation", onTap: () => _showSettings(context)),
+                  _buildOption(context, icon: Icons.bar_chart, title: "Statistiques", subtitle: "Mon temps de visionnage", onTap: () {}),
+                  _buildOption(context, icon: Icons.emoji_events, title: "Mes badges", subtitle: "Récompenses débloquées", onTap: () {}),
+                  _buildOption(context, icon: Icons.favorite, title: "Favoris", subtitle: "Mes films et series favoris", onTap: () {}),
                 ],
               ),
             ),
@@ -142,7 +202,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildProfileOption(BuildContext context, {required IconData icon, required String title, required String subtitle, required VoidCallback onTap}) {
+  Widget _buildOption(BuildContext context, {required IconData icon, required String title, required String subtitle, required VoidCallback onTap}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Card(
       color: isDark ? const Color(0xFF1F1F1F) : Colors.grey[100],      
@@ -152,7 +212,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: ListTile(
         leading: Icon(icon, color: Colors.deepPurpleAccent),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+        subtitle: subtitle.isNotEmpty ? Text(subtitle, style: const TextStyle(fontSize: 12)) : null,
         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
         onTap: onTap,
       ),

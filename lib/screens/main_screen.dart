@@ -55,7 +55,6 @@ class _MainScreenState extends State<MainScreen> {
             showSelectedLabels: false,
             showUnselectedLabels: false,
             selectedItemColor: Colors.deepPurpleAccent,
-            // Couleur dynamique des icônes non sélectionnées
             unselectedItemColor: isDark ? Colors.white54 : Colors.black38,
             currentIndex: _selectedIndex,
             onTap: (index) {
