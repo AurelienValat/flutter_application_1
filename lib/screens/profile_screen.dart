@@ -20,76 +20,89 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _showSettings(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.transparent, 
+      backgroundColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return ValueListenableBuilder<ThemeMode>(
-          valueListenable: themeNotifier,
-          builder: (context, currentMode, child) {
-            final isDarkInner = currentMode == ThemeMode.dark;
-            
-            return Container(
-              decoration: BoxDecoration(
-                color: isDarkInner ? const Color(0xFF1F1F1F) : Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    "Paramètres d'affichage",
-                    style: TextStyle(
-                      fontSize: 18, 
-                      fontWeight: FontWeight.bold,
-                      color: isDarkInner ? Colors.white : Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  // Option Vertical Lock
-                  ListTile(
-                    leading: const Icon(Icons.screen_lock_portrait, color: Colors.deepPurpleAccent),
-                    title: Text("Forcer le mode Vertical", 
-                      style: TextStyle(color: isDarkInner ? Colors.white : Colors.black)),
-                    trailing: Switch(
-                      value: _isVerticalLocked,
-                      activeColor: Colors.deepPurpleAccent,
-                      onChanged: (bool value) {
-                        if (value) {
-                          SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-                        } else {
-                          SystemChrome.setPreferredOrientations(DeviceOrientation.values);
-                        }
-                        setState(() => _isVerticalLocked = value);
-                      },
-                    ),
-                  ),
+        // Le StatefulBuilder permet de rafraîchir le Switch instantanément
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return ValueListenableBuilder<ThemeMode>(
+              valueListenable: themeNotifier,
+              builder: (context, currentMode, child) {
+                final isDarkInner = currentMode == ThemeMode.dark;
 
-                  // Option Mode Sombre
-                  ListTile(
-                    leading: Icon(
-                      isDarkInner ? Icons.dark_mode : Icons.light_mode, 
-                      color: Colors.deepPurpleAccent
-                    ),
-                    title: Text("Mode Sombre", 
-                      style: TextStyle(color: isDarkInner ? Colors.white : Colors.black)),
-                    trailing: Switch(
-                      value: isDarkInner,
-                      activeColor: Colors.deepPurpleAccent,
-                      onChanged: (bool value) {
-                        themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
-                        setState(() {
-                          _isDarkMode = value;
-                        });
-                      },
-                    ),
+                return Container(
+                  decoration: BoxDecoration(
+                    color: isDarkInner ? const Color(0xFF1F1F1F) : Colors.white,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                   ),
-                  const SizedBox(height: 20),
-                ],
-              ),
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "Paramètres d'affichage",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: isDarkInner ? Colors.white : Colors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Option Vertical Lock
+                      ListTile(
+                        leading: const Icon(Icons.screen_lock_portrait, color: Colors.deepPurpleAccent),
+                        title: Text(
+                          "Forcer le mode Vertical",
+                          style: TextStyle(color: isDarkInner ? Colors.white : Colors.black),
+                        ),
+                        trailing: Switch(
+                          value: _isVerticalLocked,
+                          activeColor: Colors.deepPurpleAccent,
+                          onChanged: (bool value) {
+                            if (value) {
+                              SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+                            } else {
+                              SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+                            }
+                            
+                            // On met à jour l'état de la page ET de la modale
+                            setState(() => _isVerticalLocked = value);
+                            setModalState(() {}); 
+                          },
+                        ),
+                      ),
+
+                      // Option Mode Sombre
+                      ListTile(
+                        leading: Icon(
+                          isDarkInner ? Icons.dark_mode : Icons.light_mode,
+                          color: Colors.deepPurpleAccent,
+                        ),
+                        title: Text(
+                          "Mode Sombre",
+                          style: TextStyle(color: isDarkInner ? Colors.white : Colors.black),
+                        ),
+                        trailing: Switch(
+                          value: isDarkInner,
+                          activeColor: Colors.deepPurpleAccent,
+                          onChanged: (bool value) {
+                            // Le ValueListenableBuilder s'occupe de redessiner ici
+                            themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
+                            setState(() {
+                              _isDarkMode = value;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+                  ),
+                );
+              },
             );
           },
         );
@@ -200,18 +213,6 @@ void _showDeleteConfirmation(BuildContext context) {
 
   void _showFavoris(BuildContext context) {
     // TODO Favoris
-  }
-
-  Future<void> _signOut() async {
-    try {
-      await FirebaseAuth.instance.signOut();
-      // Optionnel : si tu veux aussi déconnecter le compte Google proprement
-      await GoogleSignIn().signOut(); 
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erreur lors de la déconnexion : $e")),
-      );
-    }
   }
 
   Future<void> _deleteAccount(BuildContext context) async {
