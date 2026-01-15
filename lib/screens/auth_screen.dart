@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -170,7 +171,14 @@ class _AuthScreenState extends State<AuthScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(Icons.movie_filter, size: 80, color: Colors.deepPurpleAccent),
-              const SizedBox(height: 20),
+              Text(
+                "Vibe.",
+                style: GoogleFonts.permanentMarker(
+                  fontSize: 40,
+                  color: Colors.deepPurpleAccent,
+                ),
+              ),
+              const SizedBox(height: 30),
               Text(
                 isLogin ? "Bon retour !" : "Créez votre compte",
                 style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: theme.textTheme.titleLarge?.color),
@@ -233,15 +241,39 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                 ),
                 const SizedBox(height: 15),
-                SizedBox(
+               SizedBox(
                   width: double.infinity,
                   height: 55,
-                  child: OutlinedButton.icon(
+                  child: OutlinedButton(
                     onPressed: _signInWithGoogle,
-                    icon: const Icon(Icons.login), // Idéalement remplacer par logo Google
-                    label: const Text("Continuer avec Google"),
                     style: OutlinedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF1F1F1F),
+                      side: const BorderSide(color: Color(0xFF747775)),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                      elevation: 0,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Lien direct vers un PNG officiel pour éviter les erreurs de format
+                        Image.network(
+                          'https://pngimg.com/uploads/google/google_PNG19635.png',
+                          height: 40,
+                          width: 40,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(Icons.account_circle, color: Colors.blue);
+                          },
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          "Continuer avec Google",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
