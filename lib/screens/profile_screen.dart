@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../main.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -12,11 +13,24 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // On crée une variable pour mémoriser l'état du bouton
   bool _isVerticalLocked = true; 
-  bool _isDarkMode = true;
+  int _defaultPageIndex = 0; // Stocke l'onglet de démarrage (0: Accueil, 1: Liste, 2: Profil)
 
-  
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  // Charger la préférence de page de démarrage au lancement de l'écran
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _defaultPageIndex = prefs.getInt('default_page') ?? 0;
+    });
+  }
+
+  // --- FENÊTRE PARAMÈTRES (ORIENTATION, THÈME, PAGE DÉFAUT) ---
   void _showSettings(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -25,7 +39,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        // Le StatefulBuilder permet de rafraîchir le Switch instantanément
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setModalState) {
             return ValueListenableBuilder<ThemeMode>(
@@ -52,13 +65,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Option Vertical Lock
+                      // Toggle Vertical
                       ListTile(
                         leading: const Icon(Icons.screen_lock_portrait, color: Colors.deepPurpleAccent),
-                        title: Text(
-                          "Forcer le mode Vertical",
-                          style: TextStyle(color: isDarkInner ? Colors.white : Colors.black),
-                        ),
+                        title: Text("Forcer le mode Vertical",
+                            style: TextStyle(color: isDarkInner ? Colors.white : Colors.black)),
                         trailing: Switch(
                           value: _isVerticalLocked,
                           activeColor: Colors.deepPurpleAccent,
@@ -68,33 +79,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             } else {
                               SystemChrome.setPreferredOrientations(DeviceOrientation.values);
                             }
-                            
-                            // On met à jour l'état de la page ET de la modale
                             setState(() => _isVerticalLocked = value);
                             setModalState(() {}); 
                           },
                         ),
                       ),
 
-                      // Option Mode Sombre
+                      // Toggle Mode Sombre
                       ListTile(
                         leading: Icon(
                           isDarkInner ? Icons.dark_mode : Icons.light_mode,
                           color: Colors.deepPurpleAccent,
                         ),
-                        title: Text(
-                          "Mode Sombre",
-                          style: TextStyle(color: isDarkInner ? Colors.white : Colors.black),
-                        ),
+                        title: Text("Mode Sombre",
+                            style: TextStyle(color: isDarkInner ? Colors.white : Colors.black)),
                         trailing: Switch(
                           value: isDarkInner,
                           activeColor: Colors.deepPurpleAccent,
                           onChanged: (bool value) {
-                            // Le ValueListenableBuilder s'occupe de redessiner ici
                             themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
-                            setState(() {
-                              _isDarkMode = value;
-                            });
+                          },
+                        ),
+                      ),
+
+                      const Divider(),
+
+                      // Choix de l'onglet par défaut
+                      ListTile(
+                        leading: const Icon(Icons.start, color: Colors.deepPurpleAccent),
+                        title: Text("Page d'accueil par défaut", 
+                            style: TextStyle(color: isDarkInner ? Colors.white : Colors.black)),
+                        trailing: DropdownButton<int>(
+                          value: _defaultPageIndex,
+                          dropdownColor: isDarkInner ? const Color(0xFF2C2C2C) : Colors.white,
+                          underline: const SizedBox(),
+                          style: TextStyle(color: isDarkInner ? Colors.white : Colors.black),
+                          items: const [
+                            DropdownMenuItem(value: 0, child: Text("Accueil")),
+                            DropdownMenuItem(value: 1, child: Text("Ma Liste")),
+                            DropdownMenuItem(value: 2, child: Text("Profil")),
+                          ],
+                          onChanged: (int? newValue) async {
+                            if (newValue != null) {
+                              final prefs = await SharedPreferences.getInstance();
+                              await prefs.setInt('default_page', newValue);
+                              
+                              setModalState(() => _defaultPageIndex = newValue);
+                              setState(() => _defaultPageIndex = newValue);
+
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text("Préférence enregistrée !"), duration: Duration(seconds: 1)),
+                                );
+                              }
+                            }
                           },
                         ),
                       ),
@@ -110,14 +148,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showStats(BuildContext context) {
-    // TODO Stats
-  }
-
-  void _showBadges(BuildContext context) {
-    // TODO Badges
-  }
-
+  // --- FENÊTRE MON COMPTE (INFOS + DÉCONNEXION) ---
   void _showCompte(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -125,7 +156,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: isDark ? const Color(0xFF1F1F1F) : Colors.white,
-      isScrollControlled: true, // Pour éviter que le contenu soit coupé
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
@@ -153,7 +184,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 30),
               
-              // BOUTON DÉCONNEXION
               SizedBox(
                 width: double.infinity,
                 height: 50,
@@ -171,18 +201,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
-              
               const SizedBox(height: 10),
-
-              // BOUTON SUPPRIMER LE COMPTE
               TextButton(
                 onPressed: () => _showDeleteConfirmation(context),
-                child: const Text(
-                  "Supprimer mon compte définitivement",
-                  style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w400),
-                ),
+                child: const Text("Supprimer mon compte définitivement", style: TextStyle(color: Colors.redAccent)),
               ),
-              const SizedBox(height: 10),
             ],
           ),
         );
@@ -190,67 +213,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-// Fenêtre de confirmation avant suppression
-void _showDeleteConfirmation(BuildContext context) {
+  void _showDeleteConfirmation(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Supprimer le compte ?"),
-        content: const Text("Cette action est irréversible. Toutes vos données seront perdues."),
+        content: const Text("Cette action est irréversible."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Annuler")),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Fermer le dialogue
-              _deleteAccount(context); // Lancer la suppression
-            },
-            child: const Text("Supprimer", style: TextStyle(color: Colors.red)),
-          ),
+          TextButton(onPressed: () { Navigator.pop(context); _deleteAccount(context); }, child: const Text("Supprimer", style: TextStyle(color: Colors.red))),
         ],
       ),
     );
   }
 
-  void _showFavoris(BuildContext context) {
-    // TODO Favoris
-  }
-
   Future<void> _deleteAccount(BuildContext context) async {
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-        }
-
-        await user.delete();
-        
-        if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Compte supprimé avec succès."),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-      }
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'requires-recent-login') {
-        // Firebase demande une reconnexion si la session est trop ancienne pour supprimer le compte
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Veuillez vous reconnecter avant de supprimer votre compte.")),
-        );
-      }
+      await FirebaseAuth.instance.currentUser?.delete();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Erreur : $e")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Erreur : $e")));
     }
   }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -259,23 +247,19 @@ void _showDeleteConfirmation(BuildContext context) {
           children: [
             const SizedBox(height: 30),
             Text(
-              "Nom d'utilisateur",
-              style: TextStyle(
-                fontSize: 28, 
-                fontWeight: FontWeight.bold, 
-                color: theme.textTheme.titleLarge?.color
-              )
+              user?.displayName ?? "VIBE.",
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: theme.textTheme.titleLarge?.color),
             ),
             const SizedBox(height: 30),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 children: [
-                  _buildOption(context, icon: Icons.account_circle, title: "Mon Compte", subtitle: "Gérer mes infos personnelles", onTap: () => _showCompte(context)),
-                  _buildOption(context, icon: Icons.settings, title: "Paramètres", subtitle: "Affichage et orientation", onTap: () => _showSettings(context)),
+                  _buildOption(context, icon: Icons.account_circle, title: "Mon Compte", subtitle: "Infos et déconnexion", onTap: () => _showCompte(context)),
+                  _buildOption(context, icon: Icons.settings, title: "Paramètres", subtitle: "Affichage et démarrage", onTap: () => _showSettings(context)),
                   _buildOption(context, icon: Icons.bar_chart, title: "Statistiques", subtitle: "Mon temps de visionnage", onTap: () {}),
                   _buildOption(context, icon: Icons.emoji_events, title: "Mes badges", subtitle: "Récompenses débloquées", onTap: () {}),
-                  _buildOption(context, icon: Icons.favorite, title: "Favoris", subtitle: "Mes films et series favoris", onTap: () {}),
+                  _buildOption(context, icon: Icons.favorite, title: "Favoris", subtitle: "Mes films préférés", onTap: () {}),
                 ],
               ),
             ),
@@ -285,35 +269,17 @@ void _showDeleteConfirmation(BuildContext context) {
     );
   }
 
-  
-
-  Widget _buildOption(BuildContext context, {
-    required IconData icon, 
-    required String title, 
-    required String subtitle, 
-    required VoidCallback onTap,
-    bool isDestructive = false, // Nouvelle option
-  }) {
+  Widget _buildOption(BuildContext context, {required IconData icon, required String title, required String subtitle, required VoidCallback onTap}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Si c'est destructif, on met du rouge, sinon la couleur habituelle
-    final Color mainColor = isDestructive ? Colors.redAccent : Colors.deepPurpleAccent;
-
     return Card(
       color: isDark ? const Color(0xFF1F1F1F) : Colors.grey[100],      
       margin: const EdgeInsets.only(bottom: 15),
-      elevation: isDark ? 0 : 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       child: ListTile(
-        leading: Icon(icon, color: mainColor),
-        title: Text(
-          title, 
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: isDestructive ? Colors.redAccent : null,
-          )
-        ),
-        subtitle: subtitle.isNotEmpty ? Text(subtitle, style: const TextStyle(fontSize: 12)) : null,
-        trailing: Icon(Icons.arrow_forward_ios, size: 16, color: isDestructive ? Colors.redAccent : null),
+        leading: Icon(icon, color: Colors.deepPurpleAccent),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
         onTap: onTap,
       ),
     );

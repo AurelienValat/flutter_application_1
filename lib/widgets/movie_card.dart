@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/database_service.dart';
 
 class MovieCard extends StatelessWidget {
-  final Map movie;
+  final Map<String, dynamic> movie;
   final VoidCallback onTap;
 
   const MovieCard({super.key, required this.movie, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
@@ -19,31 +24,12 @@ class MovieCard extends StatelessWidget {
                 ? Image.network(
                     'https://image.tmdb.org/t/p/w500${movie['poster_path']}',
                     fit: BoxFit.cover,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Center(
-                        child: CircularProgressIndicator(
-                          color: Colors.amber.withOpacity(0.5),
-                        ),
-                      );
-                    },
                   )
-                : Container(
-                    color: const Color(0xFF1F1F1F),
-                    child: const Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.movie_creation_outlined,
-                            color: Colors.white24, size: 40),
-                        SizedBox(height: 8),
-                        Text("No Image",
-                            style: TextStyle(color: Colors.white24, fontSize: 10)),
-                      ],
-                    ),
-                  ),
+                : Container(color: const Color(0xFF1F1F1F)),
+
             Positioned(
               top: 10,
-              right: 10,
+              left: 10,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -53,10 +39,49 @@ class MovieCard extends StatelessWidget {
                 child: Text(
                   "IMDB ${(movie['vote_average'] ?? 0.0).toStringAsFixed(1)}",
                   style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold),
+                      color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold),
                 ),
+              ),
+            ),
+
+            Positioned(
+              top: 10,
+              right: 10,
+              child: StreamBuilder<DocumentSnapshot>(
+                // On vérifie en temps réel si ce film existe dans la liste de l'utilisateur
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(userId)
+                    .collection('watchlist')
+                    .doc(movie['id'].toString())
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  final bool isAdded = snapshot.hasData && snapshot.data!.exists;
+
+                  return GestureDetector(
+                    onTap: () {
+                      if (isAdded) {
+                        DatabaseService().removeMovie(movie['id'].toString());
+                      } else {
+                        DatabaseService().addToWatchlist(movie);
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: isAdded 
+                            ? Colors.deepPurpleAccent 
+                            : Colors.black.withOpacity(0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isAdded ? Icons.bookmark : Icons.bookmark_add_outlined,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ],

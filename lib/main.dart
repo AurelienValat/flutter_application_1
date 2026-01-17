@@ -6,9 +6,12 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'screens/auth_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   await Firebase.initializeApp(
@@ -17,7 +20,6 @@ void main() async {
 
   runApp(const MyApp());
 }
-// Une clé globale pour accéder à l'état de la liste de films
 final GlobalKey<MovieListScreenState> movieListKey = GlobalKey<MovieListScreenState>();
 
 ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.dark);

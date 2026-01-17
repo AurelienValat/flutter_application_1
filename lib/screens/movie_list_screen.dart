@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'movie_detail_screen.dart';
 import '../widgets/filter_buttons.dart'; 
 import '../widgets/movie_card.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 
 class MovieListScreen extends StatefulWidget {
   const MovieListScreen({super.key});
@@ -16,7 +18,7 @@ class MovieListScreenState extends State<MovieListScreen> {
   List movies = [];
   bool isSearching = false;
   final TextEditingController _searchController = TextEditingController();
-  final String apiKey = "0f279ff62ffdfe1c65473f2ff7f1d739";
+  final String apiKey = dotenv.env['TMDB_API_KEY'] ?? "";
   String selectedType = 'all'; 
   final ScrollController _scrollController = ScrollController();
 

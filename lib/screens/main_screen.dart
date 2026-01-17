@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../main.dart';
-import 'movie_list_screen.dart'; // Import de tes autres pages
+import 'movie_list_screen.dart'; 
 import 'profile_screen.dart';
+import 'watchlist_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-// --- 1. GESTIONNAIRE DE NAVIGATION ---
+//GESTIONNAIRE DE NAVIGATION
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
 
@@ -14,9 +16,23 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadDefaultPage(); // Charger l'onglet par défaut au lancement
+  }
+
+  Future<void> _loadDefaultPage() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      // 0 est la valeur par défaut si rien n'est enregistré
+      _selectedIndex = prefs.getInt('default_page') ?? 0;
+    });
+  }
+  
   final List<Widget> _pages = [
     MovieListScreen(key: movieListKey), 
-    const Center(child: Text("Ma Liste")),
+    const WatchlistScreen(),
     const ProfileScreen(),
   ];
 
