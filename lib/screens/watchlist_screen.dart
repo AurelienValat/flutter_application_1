@@ -72,7 +72,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   }
 
   Widget _buildContent() {
-    // CONDITION : Si "À VENIR" est sélectionné, on n'affiche rien du tout
+    //TODO: Gérer le filtre "À VENIR"
     if (selectedSubFilter == "À VENIR") {
       return const Center(child: Text("Bientôt disponible...", style: TextStyle(color: Colors.grey)));
     }
@@ -124,14 +124,14 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 15),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
-                childAspectRatio: isInProgress ? 1.4 : 0.7,
+                childAspectRatio: 0.7,
                 crossAxisSpacing: 15,
                 mainAxisSpacing: 15,
               ),
               itemCount: docs.length,
               itemBuilder: (context, index) {
                 var movieData = docs[index].data() as Map<String, dynamic>;
-                return MovieCard(movie: movieData, onTap: () {Navigator.push(
+                return MovieCard(movie: movieData, showAddButton: false, onTap: () {Navigator.push(
                                                                 context,
                                                                 MaterialPageRoute(
                                                                   builder: (context) => MovieDetailScreen(movie: movieData),

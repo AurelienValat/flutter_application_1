@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../services/database_service.dart';
 
 class MovieDetailScreen extends StatefulWidget {
   final Map movie;
@@ -14,10 +17,11 @@ class MovieDetailScreen extends StatefulWidget {
 class _MovieDetailScreenState extends State<MovieDetailScreen> {
   int selectedSeason = 1;
   List episodes = [];
-  Map<String, dynamic>? fullData; 
+  Map<String, dynamic>? fullData;
+  List<String> seenEpisodesIds = []; // Liste locale des épisodes vus
   bool isLoading = true;
   bool isLoadingEpisodes = false;
-  
+
   final String apiKey = dotenv.env['TMDB_API_KEY'] ?? "";
 
   @override
@@ -27,45 +31,66 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   }
 
   Future<void> _fetchFullDetails() async {
-    // On récupère l'ID proprement
     final String id = widget.movie['id'].toString();
-    
-    // On détecte le type (Film ou Série)
-    final bool isSeries = widget.movie.containsKey('first_air_date') || 
-                          widget.movie['mediaType'] == "SÉRIES";
+    final bool isSeries = widget.movie.containsKey('first_air_date') ||
+        widget.movie['mediaType'] == "SÉRIES";
     final String type = isSeries ? 'tv' : 'movie';
+    final userId = FirebaseAuth.instance.currentUser?.uid;
 
     final url = Uri.parse(
-        'https://api.themoviedb.org/3/$type/$id?api_key=$apiKey&language=fr-FR');
+      'https://api.themoviedb.org/3/$type/$id?api_key=$apiKey&language=fr-FR&append_to_response=watch/providers');
 
     try {
-      print("Appel API : $url"); 
       final response = await http.get(url);
-      
+
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
         setState(() {
-          fullData = data;
-          // On force l'arrêt du chargement ici
+          fullData = json.decode(response.body);
           isLoading = false;
         });
-        if (isSeries) _fetchEpisodes(1);
-      } else {
-        print("Erreur API : ${response.statusCode} - ${response.body}");
-        setState(() => isLoading = false);
+
+        if (userId != null) {
+          final doc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .collection('watchlist')
+              .doc(id)
+              .get();
+
+          if (doc.exists) {
+            final firestoreData = doc.data() as Map<String, dynamic>;
+            setState(() {
+              seenEpisodesIds =
+                  List<String>.from(firestoreData['seenEpisodes'] ?? []);
+            });
+          }
+        }
+
+        if (response.statusCode == 200) {
+          setState(() {
+            fullData = json.decode(response.body);
+            isLoading = false;
+          });
+          if (isSeries) _fetchEpisodes(1);
+        }
+
+        // Mise à jour du total d'épisodes pour la barre de progression
+        if (fullData != null && isSeries && userId != null) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(userId)
+              .collection('watchlist')
+              .doc(id)
+              .update({
+            'totalEpisodes': fullData!['number_of_episodes'],
+          });
+        }
       }
     } catch (e) {
-      print("Exception attrapée : $e");
       setState(() => isLoading = false);
-    } finally {
-      // Sécurité ultime : on arrête le chargement quoi qu'il arrive
-      if (mounted) {
-        setState(() => isLoading = false);
-      }
     }
   }
 
-  // 2. Charger les épisodes d'une saison
   Future<void> _fetchEpisodes(int seasonNumber) async {
     setState(() {
       isLoadingEpisodes = true;
@@ -91,13 +116,14 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // On utilise fullData s'il est chargé, sinon les infos basiques de widget.movie
     final displayMovie = fullData ?? widget.movie;
-    final bool isSeries = widget.movie.containsKey('first_air_date') || 
-                          widget.movie['mediaType'] == "SÉRIES";
+    final bool isSeries = widget.movie.containsKey('first_air_date') ||
+        widget.movie['mediaType'] == "SÉRIES";
 
     if (isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator(color: Colors.deepPurpleAccent)));
+      return const Scaffold(
+          body: Center(
+              child: CircularProgressIndicator(color: Colors.deepPurpleAccent)));
     }
 
     return Scaffold(
@@ -107,50 +133,98 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // IMAGE ET NOTE
             Stack(
               children: [
                 Image.network(
                   'https://image.tmdb.org/t/p/w500${displayMovie['backdrop_path'] ?? displayMovie['poster_path']}',
-                  width: double.infinity, height: 300, fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: 300,
+                  fit: BoxFit.cover,
                 ),
                 Positioned(
-                  bottom: 10, right: 10,
+                  bottom: 10,
+                  right: 10,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(color: Colors.amber, borderRadius: BorderRadius.circular(10)),
-                    child: Text("IMDB ${(displayMovie['vote_average'] ?? 0.0).toStringAsFixed(1)}", 
-                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                        color: Colors.amber,
+                        borderRadius: BorderRadius.circular(10)),
+                    child: Text(
+                        "TMDB ${(displayMovie['vote_average'] ?? 0.0).toStringAsFixed(1)}",
+                        style: const TextStyle(
+                            color: Colors.black, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
             ),
-
             Padding(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(displayMovie['title'] ?? displayMovie['name'] ?? 'Titre inconnu', 
-                    style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 10),
-                  Text(
-                    "Sortie : ${displayMovie['release_date'] ?? displayMovie['first_air_date'] ?? 'Inconnue'}", 
-                    style: const TextStyle(color: Colors.grey)
-                  ),
-                  const SizedBox(height: 20),
-                  const Text("Synopsis", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 10),
-                  Text(displayMovie['overview'] ?? "Aucun synopsis disponible.", 
-                    style: const TextStyle(fontSize: 16, height: 1.4)),
                   
-                  // SECTION SÉRIES
+                  Text(
+                      displayMovie['title'] ??
+                          displayMovie['name'] ??
+                          'Titre inconnu',
+                      style: const TextStyle(
+                          fontSize: 26, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+
+                  // TODO pour series: afficher temps moyen par épisode à la place du nombre de saisons
+                  Text(
+                      "Durée : ${isSeries ? (fullData != null ? fullData!['number_of_seasons'].toString() + ' saisons' : 'N/A') : (displayMovie['runtime'] != null ? displayMovie['runtime'].toString() + ' min' : 'N/A')}",
+                      style: const TextStyle(color: Colors.grey)),
+                      
+                  const SizedBox(height: 10),
+
+                  Text(
+                      "Sortie : ${displayMovie['release_date'] ?? displayMovie['first_air_date'] ?? 'Inconnue'}",
+                      style: const TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 20),
+
+                  if (displayMovie['genres'] != null)
+                    Wrap(
+                      spacing: 8, // Espace horizontal entre les badges
+                      runSpacing: 4, // Espace vertical si ça passe à la ligne
+                      children: (displayMovie['genres'] as List).map((genre) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.deepPurpleAccent.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.5)),
+                          ),
+                          child: Text(
+                            genre['name'],
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+
+                  const SizedBox(height: 10),
+
+                  _buildProviders(displayMovie),
+
+                  const SizedBox(height: 20),
+                  const Text("Synopsis",
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 10),
+                  Text(displayMovie['overview'] ?? "Aucun synopsis disponible.",
+                      style: const TextStyle(fontSize: 16, height: 1.4)),
                   if (isSeries && fullData != null) ...[
                     const SizedBox(height: 30),
-                    const Text("Saisons", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const Text("Saisons",
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
-                    
-                    // Sélecteur de Saisons
                     SizedBox(
                       height: 40,
                       child: ListView.builder(
@@ -170,15 +244,14 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                         },
                       ),
                     ),
-
                     const SizedBox(height: 20),
-                    Text("Épisodes (${episodes.length})", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    
+                    Text("Épisodes (${episodes.length})",
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
                     if (isLoadingEpisodes)
                       const Padding(
-                        padding: EdgeInsets.all(20.0),
-                        child: Center(child: CircularProgressIndicator()),
-                      )
+                          padding: EdgeInsets.all(20.0),
+                          child: Center(child: CircularProgressIndicator()))
                     else
                       ListView.builder(
                         padding: EdgeInsets.zero,
@@ -187,24 +260,94 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                         itemCount: episodes.length,
                         itemBuilder: (context, index) {
                           final ep = episodes[index];
+                          final String epId = ep['id'].toString();
+                          bool isSeen = seenEpisodesIds.contains(epId);
+
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: ClipRRect(
                               borderRadius: BorderRadius.circular(5),
-                              child: ep['still_path'] != null 
-                                ? Image.network("https://image.tmdb.org/t/p/w200${ep['still_path']}", width: 80, fit: BoxFit.cover)
-                                : Container(width: 80, color: Colors.grey[800], child: const Icon(Icons.tv)),
+                              child: ep['still_path'] != null
+                                  ? Image.network(
+                                      "https://image.tmdb.org/t/p/w200${ep['still_path']}",
+                                      width: 80,
+                                      fit: BoxFit.cover)
+                                  : Container(
+                                      width: 80,
+                                      color: Colors.grey[800],
+                                      child: const Icon(Icons.tv)),
                             ),
                             title: Text("E${ep['episode_number']} - ${ep['name']}"),
-                            subtitle: Text(ep['overview'] ?? "", maxLines: 2, overflow: TextOverflow.ellipsis),
-                            
+                            subtitle: Text(ep['overview'] ?? "",
+                                maxLines: 2, overflow: TextOverflow.ellipsis),
                             trailing: IconButton(
-                              icon: const Icon(Icons.check_circle_outline, color: Colors.grey),
-                              onPressed: () {
-                                // TODO : Logique Firestore pour passer en "En cours"
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text("Épisode ${ep['episode_number']} marqué comme vu")),
+                              icon: Icon(
+                                isSeen
+                                    ? Icons.check_circle
+                                    : Icons.check_circle_outline,
+                                color: isSeen ? Colors.green : Colors.grey,
+                              ),
+                              onPressed: () async {
+                                bool newStatus = !isSeen;
+                                String movieId = widget.movie['id'].toString();
+                                String userId = FirebaseAuth.instance.currentUser!.uid;
+
+                                // 1. Mise à jour via DatabaseService
+                                await DatabaseService().toggleEpisodeSeen(
+                                  movieId,
+                                  epId,
+                                  newStatus,
                                 );
+
+                                // 2. Mise à jour de la liste locale pour le calcul de isInProgress
+                                setState(() {
+                                  if (newStatus) {
+                                    seenEpisodesIds.add(epId);
+                                  } else {
+                                    seenEpisodesIds.remove(epId);
+                                  }
+                                });
+
+                                // 3. Déterminer si la série est toujours "En cours"
+                                bool remainsInProgress = seenEpisodesIds.isNotEmpty;
+
+                                // 4. Mise à jour des badges et du statut
+                                if (remainsInProgress) {
+                                  await FirebaseFirestore.instance
+                                      .collection('users')
+                                      .doc(userId)
+                                      .collection('watchlist')
+                                      .doc(movieId)
+                                      .update({
+                                    'isInProgress': true,
+                                    'lastSeasonSeen': selectedSeason,
+                                    'lastEpisodeSeen': ep['episode_number'],
+                                    'nextSeasonToSee': newStatus
+                                        ? (ep['episode_number'] < episodes.length
+                                            ? selectedSeason
+                                            : selectedSeason + 1)
+                                        : selectedSeason,
+                                    'nextEpisodeToSee': newStatus
+                                        ? (ep['episode_number'] < episodes.length
+                                            ? ep['episode_number'] + 1
+                                            : 1)
+                                        : ep['episode_number'],
+                                  });
+                                } else {
+                                  // Si on a tout décoché : retour à "Pas commencé"
+                                  await FirebaseFirestore.instance
+                                      .collection('users')
+                                      .doc(userId)
+                                      .collection('watchlist')
+                                      .doc(movieId)
+                                      .update({
+                                    'isInProgress': false,
+                                    'lastSeasonSeen': null,
+                                    'lastEpisodeSeen': null,
+                                    'nextSeasonToSee': 1,
+                                    'nextEpisodeToSee': 1,
+                                  });
+                                }
                               },
                             ),
                           );
@@ -217,6 +360,47 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
           ],
         ),
       ),
+    );
+  }
+
+    Widget _buildProviders(Map? data) {
+    // On va chercher dans watch/providers -> results -> FR -> flatrate
+    var providers = data?['watch/providers']?['results']?['FR']?['flatrate'];
+
+    if (providers == null || (providers as List).isEmpty) {
+      return const SizedBox.shrink(); // Ne renvoie rien si pas de plateforme
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 15),
+        const Text("Disponible sur :", 
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.grey)),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 45,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: (providers as List).length,
+            itemBuilder: (context, index) {
+              final provider = providers[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: Tooltip(
+                  message: provider['provider_name'], // Affiche le nom au clic long
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      "https://image.tmdb.org/t/p/w200${provider['logo_path']}",
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
