@@ -104,6 +104,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
           .collection('watchlist')
           .where('mediaType', isEqualTo: selectedType)
           .where('isInProgress', isEqualTo: isInProgress)
+          .where('isFinished', isEqualTo: false) 
           .snapshots(),
       builder: (context, snapshot) {
         // Si pas de données ou vide : On retourne un espace vide (titre caché)

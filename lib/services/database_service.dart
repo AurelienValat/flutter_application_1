@@ -28,24 +28,31 @@ class DatabaseService {
   // Ajouter un film ou une serie à la liste
   Future<void> addToWatchlist(Map<String, dynamic> movie, {int totalEpisodes = 0}) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+  if (user == null) return;
 
-    // TMDB utilise 'name' pour les séries et 'title' pour les films
-    bool isSeries = movie.containsKey('name') || movie['first_air_date'] != null;
+  bool isSeries = movie.containsKey('name') || movie['first_air_date'] != null;
 
-    await _db.collection('users').doc(userId).collection('watchlist').doc(movie['id'].toString()).set({
-      'id': movie['id'],
-      'title': isSeries ? (movie['name'] ?? 'Sans titre') : (movie['title'] ?? 'Sans titre'),
-      'poster_path': movie['poster_path'],
-      'vote_average': movie['vote_average'],
-      'mediaType': isSeries ? "SÉRIES" : "FILMS", 
-      'isInProgress': false, // Par défaut "Pas commencé"
-      'status': 'A VOIR',    // Par défaut "À voir"
-      'addedAt': FieldValue.serverTimestamp(),
-      'totalEpisodes': totalEpisodes, 
-      'seenEpisodes': [],
-    });
-  }
+  await FirebaseFirestore.instance
+      .collection('users')
+      .doc(user.uid)
+      .collection('watchlist')
+      .doc(movie['id'].toString())
+      .set({
+    'id': movie['id'],
+    'title': isSeries ? (movie['name'] ?? 'Sans titre') : (movie['title'] ?? 'Sans titre'),
+    'poster_path': movie['poster_path'],
+    'vote_average': movie['vote_average'],
+    'mediaType': isSeries ? "SÉRIES" : "FILMS",
+    
+    'isInProgress': false, 
+    'isFinished': false,  
+    
+    'status': 'A VOIR',
+    'addedAt': FieldValue.serverTimestamp(),
+    'seenEpisodes': [],
+    'seenKeys': [],
+  });
+}
 
   // Marquer un épisode comme vu
   // Dans DatabaseService
