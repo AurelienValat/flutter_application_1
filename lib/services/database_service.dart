@@ -1,5 +1,9 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
 
 class DatabaseService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -26,33 +30,56 @@ class DatabaseService {
   }
 
   // Ajouter un film ou une serie à la liste
-  Future<void> addToWatchlist(Map<String, dynamic> movie, {int totalEpisodes = 0}) async {
-    final user = FirebaseAuth.instance.currentUser;
-  if (user == null) return;
+ Future<void> addToWatchlist(Map<String, dynamic> movie) async {
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId == null) return;
 
-  bool isSeries = movie.containsKey('name') || movie['first_air_date'] != null;
+    // 1. On prépare les infos de base
+    String movieId = movie['id'].toString();
+    bool isSeries = movie.containsKey('first_air_date') || movie['mediaType'] == "SÉRIES";
+    
+    // On crée le document de base
+    Map<String, dynamic> movieData = {
+      ...movie,
+      'userId': userId,
+      'addedAt': FieldValue.serverTimestamp(),
+      'isInProgress': false,
+      'isFinished': false,
+    };
 
-  await FirebaseFirestore.instance
-      .collection('users')
-      .doc(user.uid)
-      .collection('watchlist')
-      .doc(movie['id'].toString())
-      .set({
-    'id': movie['id'],
-    'title': isSeries ? (movie['name'] ?? 'Sans titre') : (movie['title'] ?? 'Sans titre'),
-    'poster_path': movie['poster_path'],
-    'vote_average': movie['vote_average'],
-    'mediaType': isSeries ? "SÉRIES" : "FILMS",
-    
-    'isInProgress': false, 
-    'isFinished': false,  
-    
-    'status': 'A VOIR',
-    'addedAt': FieldValue.serverTimestamp(),
-    'seenEpisodes': [],
-    'seenKeys': [],
-  });
-}
+    // 2. MAGIE : On va chercher les infos "À venir" direct chez TMDB
+    final apiKey = dotenv.env['TMDB_API_KEY'] ?? "";
+    final type = isSeries ? 'tv' : 'movie';
+    final url = Uri.parse('https://api.themoviedb.org/3/$type/$movieId?api_key=$apiKey&language=fr-FR&append_to_response=next_episode_to_air');
+
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final fullData = json.decode(response.body);
+        
+        if (isSeries) {
+          final nextEp = fullData['next_episode_to_air'];
+          if (nextEp != null) {
+            movieData['nextAirDate'] = nextEp['air_date'];
+            movieData['nextAirLabel'] = "S${nextEp['season_number']}E${nextEp['episode_number']} - ${nextEp['name']}";
+          }
+          movieData['totalEpisodes'] = fullData['number_of_episodes'];
+        } else {
+          movieData['nextAirDate'] = fullData['release_date'];
+        }
+      }
+    } catch (e) {
+      print("Erreur fetch auto: $e");
+    }
+
+    // 3. On enregistre le tout complet dans Firestore
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('watchlist')
+        .doc(movieId)
+        .set(movieData);
+  }
 
   // Marquer un épisode comme vu
   // Dans DatabaseService
