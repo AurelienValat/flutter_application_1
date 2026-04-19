@@ -16,6 +16,7 @@ class MovieDetailScreen extends StatefulWidget {
 
 class _MovieDetailScreenState extends State<MovieDetailScreen> {
   int selectedSeason = 1;
+  int currentTabIndex = 0;
   List episodes = [];
   List cast = [];
   Map<String, dynamic>? fullData;
@@ -26,7 +27,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   bool isMovieSeen = false;
   bool isInWatchlist = false;
   bool isSynopsisExpanded = false;
-  bool isClosing = false; // Variable pour empêcher les doubles fermetures
+  bool isClosing = false;
 
   final String apiKey = dotenv.env['TMDB_API_KEY'] ?? "";
 
@@ -66,16 +67,11 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
 
       if (response.statusCode == 200) {
         final decodedData = json.decode(response.body);
-        
-        if (isSeries) {
-          await _fetchEpisodes(1); 
-        }
-
+        if (isSeries) await _fetchEpisodes(1); 
         setState(() {
           fullData = decodedData;
           isLoading = false; 
         });
-
         if (userId != null && isInWatchlist) {
           _updateReleaseDates(decodedData, isSeries, id, userId);
         }
@@ -175,158 +171,179 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     );
   }
 
+  Widget _buildTabButton(String title, int index) {
+    bool isSelected = currentTabIndex == index;
+    return GestureDetector(
+      onTap: () => setState(() => currentTabIndex = index),
+      child: Column(
+        children: [
+          Text(title, style: TextStyle(color: isSelected ? Colors.deepPurpleAccent : Colors.grey, fontWeight: FontWeight.bold, fontSize: 16)),
+          if (isSelected) Container(margin: const EdgeInsets.only(top: 4), height: 3, width: 24, decoration: BoxDecoration(color: Colors.deepPurpleAccent, borderRadius: BorderRadius.circular(2))),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading) return const Scaffold(body: Center(child: CircularProgressIndicator(color: Colors.deepPurpleAccent)));
     
     final displayMovie = fullData ?? widget.movie;
     final bool isSeries = widget.movie.containsKey('first_air_date') || widget.movie.containsKey('name') || widget.movie['mediaType'] == "SÉRIES";
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF0F0F0F) : Colors.white;
 
-    return DefaultTabController(
-      length: isSeries ? 2 : 1,
-      child: Scaffold(
-        backgroundColor: isDark ? const Color(0xFF0F0F0F) : Colors.white,
-        
-        // --- LE DÉTECTEUR DE SWIPE ---
-        body: NotificationListener<ScrollNotification>(
-          onNotification: (notification) {
-            // Si on détecte un tirage vers le bas (pixels < -70)
-            if (notification.metrics.pixels < -70 && !isClosing) {
-              setState(() => isClosing = true);
-              Navigator.pop(context);
-              return true;
-            }
-            return false;
-          },
-          child: NestedScrollView(
-            // FORCE LE REBOND GLOBAL
-            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-            headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
-              return <Widget>[
-                SliverAppBar(
-                  expandedHeight: MediaQuery.of(context).size.height * 0.55,
-                  pinned: true,
-                  stretch: true, 
-                  backgroundColor: isDark ? const Color(0xFF0F0F0F) : Colors.white,
-                  elevation: 0,
-                  leading: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: CircleAvatar(backgroundColor: Colors.black.withOpacity(0.5), child: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context))),
-                  ),
-                  actions: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: CircleAvatar(backgroundColor: Colors.black.withOpacity(0.5), child: IconButton(icon: Icon(isInWatchlist ? Icons.bookmark : Icons.bookmark_add_outlined, color: isInWatchlist ? Colors.deepPurpleAccent : Colors.white), onPressed: _toggleWatchlist)),
-                    ),
-                    const SizedBox(width: 10),
-                    Padding(
-                      padding: const EdgeInsets.only(right: 15.0, top: 8.0, bottom: 8.0),
-                      child: CircleAvatar(backgroundColor: Colors.black.withOpacity(0.5), child: IconButton(icon: const Icon(Icons.more_vert, color: Colors.white), onPressed: () => _showOptionsPanel(context))),
-                    ),
-                  ],
-                  flexibleSpace: FlexibleSpaceBar(
-                    stretchModes: const [StretchMode.zoomBackground],
-                    collapseMode: CollapseMode.parallax,
-                    background: Image.network(
-                      'https://image.tmdb.org/t/p/w500${displayMovie['poster_path'] ?? displayMovie['backdrop_path']}',
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  bottom: PreferredSize(
-                    preferredSize: Size.fromHeight(isSeries ? 65.0 : 30.0),
-                    child: Container(
-                      height: isSeries ? 65.0 : 30.0,
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF0F0F0F) : Colors.white,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                      ),
-                      child: isSeries
-                          ? Column(
-                              children: [
-                                const SizedBox(height: 15),
-                                const TabBar(
-                                  indicatorColor: Colors.deepPurpleAccent,
-                                  indicatorSize: TabBarIndicatorSize.label,
-                                  labelColor: Colors.deepPurpleAccent,
-                                  unselectedLabelColor: Colors.grey,
-                                  dividerColor: Colors.transparent,
-                                  tabs: [
-                                    Tab(text: "INFOS"),
-                                    Tab(text: "ÉPISODES"),
-                                  ],
-                                ),
-                              ],
-                            )
-                          : const SizedBox.shrink(),
+    return Scaffold(
+      backgroundColor: bgColor,
+      // Le Listener écoute le défilement global de l'écran unique
+      body: NotificationListener<ScrollUpdateNotification>(
+        onNotification: (notification) {
+          // Si on "tire" la page entière vers le bas
+          if (notification.metrics.pixels < -80 && !isClosing) {
+            setState(() => isClosing = true);
+            Navigator.pop(context);
+            return true;
+          }
+          return false;
+        },
+        child: CustomScrollView(
+          // Force l'élasticité de la page entière
+          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          slivers: [
+            // 1. L'IMAGE EN HAUT
+            SliverAppBar(
+              expandedHeight: MediaQuery.of(context).size.height * 0.55,
+              pinned: true,
+              stretch: true,
+              backgroundColor: bgColor,
+              elevation: 0,
+              leading: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: CircleAvatar(backgroundColor: Colors.black.withOpacity(0.5), child: IconButton(icon: const Icon(Icons.arrow_back, color: Colors.white), onPressed: () => Navigator.pop(context))),
+              ),
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: CircleAvatar(backgroundColor: Colors.black.withOpacity(0.5), child: IconButton(icon: Icon(isInWatchlist ? Icons.bookmark : Icons.bookmark_add_outlined, color: isInWatchlist ? Colors.deepPurpleAccent : Colors.white), onPressed: _toggleWatchlist)),
+                ),
+                const SizedBox(width: 10),
+                Padding(
+                  padding: const EdgeInsets.only(right: 15.0, top: 8.0, bottom: 8.0),
+                  child: CircleAvatar(backgroundColor: Colors.black.withOpacity(0.5), child: IconButton(icon: const Icon(Icons.more_vert, color: Colors.white), onPressed: () => _showOptionsPanel(context))),
+                ),
+              ],
+              flexibleSpace: FlexibleSpaceBar(
+                stretchModes: const [StretchMode.zoomBackground],
+                collapseMode: CollapseMode.parallax,
+                background: Image.network('https://image.tmdb.org/t/p/w500${displayMovie['poster_path'] ?? displayMovie['backdrop_path']}', fit: BoxFit.cover),
+              ),
+              // Le bord arrondi supérieur
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(30.0),
+                child: Container(
+                  height: 30.0,
+                  decoration: BoxDecoration(color: bgColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(30))),
+                  alignment: Alignment.center,
+                  child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[600], borderRadius: BorderRadius.circular(10))),
+                ),
+              ),
+            ),
+            
+            // 2. LA ZONE NOIRE (UN SEUL BLOC FIXE)
+            SliverToBoxAdapter(
+              // Détecteur de Swipe Horizontal pour changer de Tab
+              child: GestureDetector(
+                onHorizontalDragEnd: (details) {
+                  if (!isSeries) return;
+                  if (details.primaryVelocity! > 300 && currentTabIndex == 1) {
+                    setState(() => currentTabIndex = 0);
+                  } else if (details.primaryVelocity! < -300 && currentTabIndex == 0) {
+                    setState(() => currentTabIndex = 1);
+                  }
+                },
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: MediaQuery.of(context).size.height * 0.5),
+                  child: Container(
+                    color: bgColor,
+                    child: Column(
+                      children: [
+                        if (isSeries) ...[
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _buildTabButton("INFOS", 0),
+                              const SizedBox(width: 40),
+                              _buildTabButton("ÉPISODES", 1),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                        // Le contenu, affiché sans aucun scroll interne
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          child: isSeries
+                              ? (currentTabIndex == 0 ? _buildInfosContent(displayMovie, isDark) : _buildEpisodesContent())
+                              : _buildInfosContent(displayMovie, isDark),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ];
-            },
-            body: Container(
-              color: isDark ? const Color(0xFF0F0F0F) : Colors.white,
-              child: isSeries 
-                ? TabBarView(
-                    children: [
-                      _buildInfosContent(displayMovie, isDark),
-                      _buildEpisodesContent(),
-                    ],
-                  )
-                : _buildInfosContent(displayMovie, isDark),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
   }
 
+  // ---- Les contenus sont maintenant des Column (plus de scroll interne) ----
+
   Widget _buildInfosContent(Map displayMovie, bool isDark) {
     final bool isSeries = widget.movie.containsKey('first_air_date') || widget.movie.containsKey('name') || widget.movie['mediaType'] == "SÉRIES";
     
-    return ListView(
-      // --- LA CLÉ EST ICI : Force l'élasticité de la liste pour détecter le "tirage vers le bas" ---
-      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+    return Padding(
+      key: const ValueKey(0), // Pour l'animation
       padding: const EdgeInsets.all(20),
-      children: [
-        Text(displayMovie['title'] ?? displayMovie['name'] ?? 'Titre inconnu', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        Text("Sortie : ${displayMovie['release_date'] ?? displayMovie['first_air_date'] ?? 'Inconnue'}", style: const TextStyle(color: Colors.grey)),
-        const SizedBox(height: 5),
-        Text("Durée : ${isSeries ? (fullData != null ? "${fullData!['number_of_seasons']} saisons (${(fullData!['episode_run_time'] != null && fullData!['episode_run_time'].isNotEmpty) ? fullData!['episode_run_time'][0] : 'N/A'} min/ép)" : "Chargement...") : (displayMovie['runtime'] != null ? "${displayMovie['runtime']} min" : "N/A")}", style: const TextStyle(color: Colors.grey)),
-        const SizedBox(height: 15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(displayMovie['title'] ?? displayMovie['name'] ?? 'Titre inconnu', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          Text("Sortie : ${displayMovie['release_date'] ?? displayMovie['first_air_date'] ?? 'Inconnue'}", style: const TextStyle(color: Colors.grey)),
+          const SizedBox(height: 5),
+          Text("Durée : ${isSeries ? (fullData != null ? "${fullData!['number_of_seasons']} saisons (${(fullData!['episode_run_time'] != null && fullData!['episode_run_time'].isNotEmpty) ? fullData!['episode_run_time'][0] : 'N/A'} min/ép)" : "Chargement...") : (displayMovie['runtime'] != null ? "${displayMovie['runtime']} min" : "N/A")}", style: const TextStyle(color: Colors.grey)),
+          const SizedBox(height: 15),
 
-        if (displayMovie['genres'] != null)
-          Wrap(spacing: 8, runSpacing: 4, children: (displayMovie['genres'] as List).map((genre) => Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.deepPurpleAccent.withOpacity(0.2), borderRadius: BorderRadius.circular(15)), child: Text(genre['name'], style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 12, fontWeight: FontWeight.w500)))).toList()),
-        
-        const SizedBox(height: 20),
-        
-        if (!isSeries) ...[_buildMovieSeenButton(), const SizedBox(height: 20)],
-        
-        _buildProviders(),
+          if (displayMovie['genres'] != null)
+            Wrap(spacing: 8, runSpacing: 4, children: (displayMovie['genres'] as List).map((genre) => Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.deepPurpleAccent.withOpacity(0.2), borderRadius: BorderRadius.circular(15)), child: Text(genre['name'], style: TextStyle(color: isDark ? Colors.white : Colors.black, fontSize: 12, fontWeight: FontWeight.w500)))).toList()),
+          
+          const SizedBox(height: 20),
+          if (!isSeries) ...[_buildMovieSeenButton(), const SizedBox(height: 20)],
+          _buildProviders(),
 
-        const Text("Synopsis", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        GestureDetector(
-          onTap: () => setState(() => isSynopsisExpanded = !isSynopsisExpanded),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                displayMovie['overview'] ?? "Aucun synopsis disponible.",
-                style: const TextStyle(fontSize: 15, height: 1.4),
-                maxLines: isSynopsisExpanded ? null : 3,
-                overflow: isSynopsisExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
-              ),
-              if (displayMovie['overview'] != null && displayMovie['overview'].length > 100)
-                Padding(padding: const EdgeInsets.only(top: 4.0), child: Text(isSynopsisExpanded ? "Réduire" : "Lire la suite", style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.bold))),
-            ],
+          const Text("Synopsis", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => setState(() => isSynopsisExpanded = !isSynopsisExpanded),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  displayMovie['overview'] ?? "Aucun synopsis disponible.",
+                  style: const TextStyle(fontSize: 15, height: 1.4),
+                  maxLines: isSynopsisExpanded ? null : 3,
+                  overflow: isSynopsisExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+                ),
+                if (displayMovie['overview'] != null && displayMovie['overview'].length > 100)
+                  Padding(padding: const EdgeInsets.only(top: 4.0), child: Text(isSynopsisExpanded ? "Réduire" : "Lire la suite", style: const TextStyle(color: Colors.deepPurpleAccent, fontWeight: FontWeight.bold))),
+              ],
+            ),
           ),
-        ),
-        
-        _buildCasting(),
-      ],
+          _buildCasting(),
+        ],
+      ),
     );
   }
 
@@ -406,77 +423,82 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
 
   Widget _buildEpisodesContent() {
     if (fullData == null || fullData!['seasons'] == null) return const Center(child: CircularProgressIndicator(color: Colors.deepPurpleAccent));
-    return ListView(
-      // --- LA CLÉ EST ICI AUSSI ---
-      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+    
+    return Padding(
+      key: const ValueKey(1), // Pour l'animation
       padding: const EdgeInsets.all(20),
-      children: [
-        SizedBox(
-          height: 40,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: fullData!['number_of_seasons'] ?? 0,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 40,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: fullData!['number_of_seasons'] ?? 0,
+              itemBuilder: (context, index) {
+                int sNum = index + 1;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: ChoiceChip(
+                    label: Text("Saison $sNum"),
+                    selected: selectedSeason == sNum,
+                    selectedColor: Colors.deepPurpleAccent.withOpacity(0.3),
+                    onSelected: (selected) { if (selected) _fetchEpisodes(sNum); },
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (isLoadingEpisodes) const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator(color: Colors.deepPurpleAccent)))
+          else ListView.builder(
+            padding: EdgeInsets.zero, 
+            shrinkWrap: true, // Empêche la liste de scroller à l'intérieur
+            physics: const NeverScrollableScrollPhysics(), // Désactive le défilement interne
+            itemCount: episodes.length,
             itemBuilder: (context, index) {
-              int sNum = index + 1;
-              return Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: ChoiceChip(
-                  label: Text("Saison $sNum"),
-                  selected: selectedSeason == sNum,
-                  selectedColor: Colors.deepPurpleAccent.withOpacity(0.3),
-                  onSelected: (selected) { if (selected) _fetchEpisodes(sNum); },
+              final ep = episodes[index];
+              final String epId = ep['id'].toString();
+              final String epKey = "S${selectedSeason}E${ep['episode_number']}";
+              bool isSeen = seenKeys.contains(epKey);
+              
+              return ListTile(
+                contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                leading: ClipRRect(borderRadius: BorderRadius.circular(8), child: ep['still_path'] != null ? Image.network("https://image.tmdb.org/t/p/w200${ep['still_path']}", width: 100, height: 60, fit: BoxFit.cover) : Container(width: 100, height: 60, color: Colors.grey[800], child: const Icon(Icons.tv))),
+                title: Text("E${ep['episode_number']} - ${ep['name']}", style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(ep['overview'] ?? "", maxLines: 2, overflow: TextOverflow.ellipsis),
+                trailing: IconButton(
+                  icon: Icon(isSeen ? Icons.check_circle : Icons.check_circle_outline, color: isSeen ? Colors.green : Colors.grey),
+                  onPressed: () async {
+                    if (!isInWatchlist) await _toggleWatchlist();
+                    bool newStatus = !isSeen;
+                    setState(() { if (newStatus) { seenEpisodesIds.add(epId); seenKeys.add(epKey); } else { seenEpisodesIds.remove(epId); seenKeys.remove(epKey); } });
+                    
+                    int maxS = 0; int maxE = 0;
+                    for (String key in seenKeys) { RegExp regExp = RegExp(r'S(\d+)E(\d+)'); Match? match = regExp.firstMatch(key); if (match != null) { int s = int.parse(match.group(1)!); int e = int.parse(match.group(2)!); if (s > maxS || (s == maxS && e > maxE)) { maxS = s; maxE = e; } } }
+                    
+                    int nextS = 1; int nextE = 1; bool isFinished = false;
+                    if (seenKeys.isNotEmpty && fullData != null && fullData!['seasons'] != null) {
+                      List seasonsList = List.from(fullData!['seasons']); seasonsList.sort((a, b) => a['season_number'].compareTo(b['season_number']));
+                      nextS = maxS; nextE = maxE + 1; bool found = false;
+                      while (!found) {
+                        var currentSData = seasonsList.firstWhere((s) => s['season_number'] == nextS, orElse: () => null);
+                        if (currentSData != null) {
+                          int totalInSeason = currentSData['episode_count'] ?? 0;
+                          if (nextE <= totalInSeason && totalInSeason > 0) { found = true; } else { nextS++; nextE = 1; if (!seasonsList.any((s) => s['season_number'] == nextS)) { isFinished = true; found = true; } }
+                        } else { isFinished = true; found = true; }
+                      }
+                    }
+                    bool isInProgress = seenKeys.isNotEmpty && !isFinished;
+                    
+                    await FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser!.uid).collection('watchlist').doc(widget.movie['id'].toString()).update({ 'isInProgress': isInProgress, 'isFinished': isFinished, 'nextSeasonToSee': isFinished ? 0 : nextS, 'nextEpisodeToSee': isFinished ? 0 : nextE, 'seenEpisodes': newStatus ? FieldValue.arrayUnion([epId]) : FieldValue.arrayRemove([epId]), 'seenKeys': newStatus ? FieldValue.arrayUnion([epKey]) : FieldValue.arrayRemove([epKey]) });
+                  },
                 ),
               );
             },
           ),
-        ),
-        const SizedBox(height: 20),
-        if (isLoadingEpisodes) const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator(color: Colors.deepPurpleAccent)))
-        else ListView.builder(
-          padding: EdgeInsets.zero, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-          itemCount: episodes.length,
-          itemBuilder: (context, index) {
-            final ep = episodes[index];
-            final String epId = ep['id'].toString();
-            final String epKey = "S${selectedSeason}E${ep['episode_number']}";
-            bool isSeen = seenKeys.contains(epKey);
-            
-            return ListTile(
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              leading: ClipRRect(borderRadius: BorderRadius.circular(8), child: ep['still_path'] != null ? Image.network("https://image.tmdb.org/t/p/w200${ep['still_path']}", width: 100, height: 60, fit: BoxFit.cover) : Container(width: 100, height: 60, color: Colors.grey[800], child: const Icon(Icons.tv))),
-              title: Text("E${ep['episode_number']} - ${ep['name']}", style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(ep['overview'] ?? "", maxLines: 2, overflow: TextOverflow.ellipsis),
-              trailing: IconButton(
-                icon: Icon(isSeen ? Icons.check_circle : Icons.check_circle_outline, color: isSeen ? Colors.green : Colors.grey),
-                onPressed: () async {
-                  if (!isInWatchlist) await _toggleWatchlist();
-                  bool newStatus = !isSeen;
-                  setState(() { if (newStatus) { seenEpisodesIds.add(epId); seenKeys.add(epKey); } else { seenEpisodesIds.remove(epId); seenKeys.remove(epKey); } });
-                  
-                  int maxS = 0; int maxE = 0;
-                  for (String key in seenKeys) { RegExp regExp = RegExp(r'S(\d+)E(\d+)'); Match? match = regExp.firstMatch(key); if (match != null) { int s = int.parse(match.group(1)!); int e = int.parse(match.group(2)!); if (s > maxS || (s == maxS && e > maxE)) { maxS = s; maxE = e; } } }
-                  
-                  int nextS = 1; int nextE = 1; bool isFinished = false;
-                  if (seenKeys.isNotEmpty && fullData != null && fullData!['seasons'] != null) {
-                    List seasonsList = List.from(fullData!['seasons']); seasonsList.sort((a, b) => a['season_number'].compareTo(b['season_number']));
-                    nextS = maxS; nextE = maxE + 1; bool found = false;
-                    while (!found) {
-                      var currentSData = seasonsList.firstWhere((s) => s['season_number'] == nextS, orElse: () => null);
-                      if (currentSData != null) {
-                        int totalInSeason = currentSData['episode_count'] ?? 0;
-                        if (nextE <= totalInSeason && totalInSeason > 0) { found = true; } else { nextS++; nextE = 1; if (!seasonsList.any((s) => s['season_number'] == nextS)) { isFinished = true; found = true; } }
-                      } else { isFinished = true; found = true; }
-                    }
-                  }
-                  bool isInProgress = seenKeys.isNotEmpty && !isFinished;
-                  
-                  await FirebaseFirestore.instance.collection('users').doc(FirebaseAuth.instance.currentUser!.uid).collection('watchlist').doc(widget.movie['id'].toString()).update({ 'isInProgress': isInProgress, 'isFinished': isFinished, 'nextSeasonToSee': isFinished ? 0 : nextS, 'nextEpisodeToSee': isFinished ? 0 : nextE, 'seenEpisodes': newStatus ? FieldValue.arrayUnion([epId]) : FieldValue.arrayRemove([epId]), 'seenKeys': newStatus ? FieldValue.arrayUnion([epKey]) : FieldValue.arrayRemove([epKey]) });
-                },
-              ),
-            );
-          },
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
